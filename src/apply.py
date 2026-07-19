@@ -143,8 +143,8 @@ def main():
         ok = resp["status"] == 200 and not blocker
         log(f"  {vid}: {'OK' if ok else 'FAIL'} {resp['status']} {str(resp['body'])[:200]}")
         body = resp.get("body") if isinstance(resp.get("body"), dict) else {}
-        # сырой HTTP-ответ НЕ хранить (раздул applied.json до 22МБ, срезано@2026-07-19);
-        # полезное из body: topic_id/chat_id — ключи для inbox/чатов
+        # сырой HTTP-ответ НЕ хранить (раздули applied.json до 34МБ, срезано@2026-07-19
+        # → data/archive/); полезное из body: topic_id/chat_id — ключи для inbox/чатов
         info = details_info(vid) or {}
         rec = {"id": vid, "result": "ok" if ok else "fail",
                "name": info.get("name"), "company": info.get("company"),
