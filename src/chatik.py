@@ -8,6 +8,12 @@
 - POST chatik.hh.ru/chatik/api/send  JSON {chatId, idempotencyKey: uuid, text}
   (+ metadata обязательна при chat.type BOT|SUPPORT — для NEGOTIATION не нужна;
   подтверждено живой отправкой@2026-07-19) → JSON нового сообщения с id.
+- POST chatik.hh.ru/chatik/api/leave JSON {chatId} — выйти из чата. Семантика
+  (вскрыто@2026-07-19 на покинутом чате): negotiation НЕ трогает, чат остаётся
+  доступным и writable (можно вернуться), в истории остаётся видимое
+  работодателю событие выхода. Т.е. чистка своего списка + мягкий сигнал.
+- Ещё в чанках (не использованы): mark_read, delete_message, chats, search,
+  toggle_notification, set_write_possibility, rate_chat, upload_file.
 
 Старый канал (SSR-конфиг /api/chat/messages, ~20 чатов) этим заменён полностью.
 """
@@ -15,6 +21,14 @@ import uuid
 
 CHAT_DATA_URL = "https://chatik.hh.ru/chatik/api/chat_data"
 SEND_URL = "https://chatik.hh.ru/chatik/api/send"
+LEAVE_URL = "https://chatik.hh.ru/chatik/api/leave"
+
+
+def _api_headers(xsrf: str, chat_id) -> dict:
+    return {"X-Xsrftoken": xsrf, "Accept": "application/json",
+            "X-Requested-With": "XMLHttpRequest",
+            "Origin": "https://chatik.hh.ru",
+            "Referer": f"https://chatik.hh.ru/chat/{chat_id}"}
 
 
 def chat_data(s, chat_id) -> dict:
@@ -49,10 +63,17 @@ def send(s, xsrf: str, chat_id, text: str) -> dict:
     r = s.post(SEND_URL, timeout=30,
                json={"chatId": int(chat_id), "idempotencyKey": str(uuid.uuid4()),
                      "text": text},
-               headers={"X-Xsrftoken": xsrf, "Accept": "application/json",
-                        "X-Requested-With": "XMLHttpRequest",
-                        "Origin": "https://chatik.hh.ru",
-                        "Referer": f"https://chatik.hh.ru/chat/{chat_id}"})
+               headers=_api_headers(xsrf, chat_id))
+    return _result(r)
+
+
+def leave(s, xsrf: str, chat_id) -> dict:
+    r = s.post(LEAVE_URL, timeout=30, json={"chatId": int(chat_id)},
+               headers=_api_headers(xsrf, chat_id))
+    return _result(r)
+
+
+def _result(r) -> dict:
     out = {"status": r.status_code}
     try:
         out["body"] = r.json()

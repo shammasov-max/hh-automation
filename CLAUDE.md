@@ -14,6 +14,7 @@ python3 src/apply.py --input data/to-apply.json          # dry-run отклик�
 python3 src/apply.py --input data/to-apply.json --send   # реальная отправка
 python3 src/inbox.py                                     # входящие: сводка attention/awaiting
 python3 src/chat_send.py --chat-id N --text-file f --expect-last-id M [--send]  # сообщение в чат
+python3 src/chat_leave.py --rejected [--send]            # чистка чатов (только по команде юзера)
 ```
 
 ## Архитектура
