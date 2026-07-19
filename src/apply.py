@@ -65,6 +65,20 @@ def send_response(s, xsrf: str, vacancy_id: int, resume_hash: str,
     return out
 
 
+def details_info(vid: int) -> dict | None:
+    """name/company в момент отклика из скан-файлов текущего прогона
+    (data/details/ их НЕ содержит — там только description/keySkills;
+    позже вакансия может уйти в архив/за captcha-стену — писать сразу)."""
+    for fname in ("scored.json", "enriched.json", "vacancies.json"):
+        p = DATA / fname
+        if not p.exists():
+            continue
+        for v in json.loads(p.read_text()):
+            if v.get("id") == vid:
+                return {"name": v.get("name"), "company": v.get("company")}
+    return None
+
+
 def verify_sent(s, vacancy_ids: set) -> set:
     """Фактическая сверка по hh.ru/applicant/negotiations — что реально создано."""
     from hh_session import get_lux_state
@@ -128,9 +142,19 @@ def main():
         blocker = is_blocker(resp)
         ok = resp["status"] == 200 and not blocker
         log(f"  {vid}: {'OK' if ok else 'FAIL'} {resp['status']} {str(resp['body'])[:200]}")
+        body = resp.get("body") if isinstance(resp.get("body"), dict) else {}
+        # сырой HTTP-ответ НЕ хранить (раздул applied.json до 22МБ, срезано@2026-07-19);
+        # полезное из body: topic_id/chat_id — ключи для inbox/чатов
+        info = details_info(vid) or {}
         rec = {"id": vid, "result": "ok" if ok else "fail",
+               "name": info.get("name"), "company": info.get("company"),
                "resume": resume_key, "letter": letter,
-               "response": resp, "ts": time.strftime("%Y-%m-%dT%H:%M:%S")}
+               "status": "sent",
+               "topicId": body.get("topic_id"), "chatId": body.get("chat_id"),
+               "httpStatus": resp["status"],
+               "ts": time.strftime("%Y-%m-%dT%H:%M:%S")}
+        if not ok:
+            rec["error"] = str(resp.get("body"))[:300]
         results.append(rec)
         if ok:
             applied.append(rec)
