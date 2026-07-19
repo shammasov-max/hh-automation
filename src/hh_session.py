@@ -33,8 +33,15 @@ def make_session() -> requests.Session:
 def get_lux_state(s: requests.Session, url: str, params: dict | None = None,
                   retries: int = 3) -> dict:
     """GET страницы hh.ru → распарсенный HH-Lux-InitialState."""
+    last_err = None
     for attempt in range(retries):
-        r = s.get(url, params=params, timeout=30)
+        try:
+            r = s.get(url, params=params, timeout=30)
+        except requests.RequestException as ex:      # транзиентные SSL/таймауты
+            last_err = ex                             # (случалось@2026-07-19)
+            log(f"{type(ex).__name__} on {url}, attempt {attempt + 1}/{retries}")
+            time.sleep(2 * (attempt + 1))
+            continue
         if r.status_code == 200:
             m = _LUX_RE.search(r.text)
             if m:
@@ -50,10 +57,13 @@ def get_lux_state(s: requests.Session, url: str, params: dict | None = None,
                 gt = r.text.find(">", idx)
                 obj, _ = json.JSONDecoder().raw_decode(r.text[gt + 1:].lstrip())
                 return obj
-            raise RuntimeError(f"no Lux state in {r.url} (len={len(r.text)})")
+            hint = " — ПОХОЖЕ НА CAPTCHA-СТЕНУ (см. память проекта)" \
+                if "captcha" in r.url or "captcha" in r.text[:3000].lower() else ""
+            raise RuntimeError(f"no Lux state in {r.url} (len={len(r.text)}){hint}")
+        last_err = f"HTTP {r.status_code}"
         log(f"HTTP {r.status_code} on {url}, attempt {attempt + 1}/{retries}")
         time.sleep(2 * (attempt + 1))
-    raise RuntimeError(f"failed to fetch {url}: HTTP {r.status_code}")
+    raise RuntimeError(f"failed to fetch {url}: {last_err}")
 
 
 def get_xsrf(s: requests.Session) -> str:

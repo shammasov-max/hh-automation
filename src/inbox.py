@@ -11,10 +11,11 @@
   дёргается только для кандидатов на обработку, история кладётся в запись.
 
 Триггеры обработки (сводка: attention[]):
-- needsAttention: чужое сообщение новее applied.lastContact. У hh-флага
-  hasNewMessages не опираемся при живом курсоре — он гаснет только открытием
-  чата, а рунг МОЛЧАНИЕ чат не открывает → вечный залип (выстрадано@2026-07-19);
-  hasNewMessages решает только при lastContact=None.
+- needsAttention: чужое сообщение новее курсора. Курсор = applied.lastContact;
+  если его нет и status=sent — фолбэк на ts отклика (иначе ответ работодателя,
+  прочитанный юзером с телефона, невидим навсегда). hh-флаг hasNewMessages
+  решает только при полном отсутствии курсора: он гаснет лишь открытием чата,
+  а рунг МОЛЧАНИЕ чат не открывает → вечный залип (выстрадано@2026-07-19).
 - stateMismatch: state hh противоречит applied.status (INTERVIEW/DISCARD).
   DISCARD логируется в rejected автоматом (терминальный, ответ запрещён
   правилом@2026-07-13); INTERVIEW — в attention, решает LLM/юзер, но только
@@ -31,6 +32,7 @@ import time
 
 from hh_session import make_session, get_lux_state, log
 from chatik import chat_data, history
+from applied_log import applied_store, now_iso
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
@@ -40,22 +42,23 @@ CHAT_THROTTLE = 1.0
 STATE_STATUS = {"DISCARD": "rejected", "INTERVIEW": "interview"}
 
 
-def _naive(ts: str | None) -> datetime.datetime | None:
+def _naive(ts) -> datetime.datetime | None:
+    """ISO → naive ЛОКАЛЬНОЕ время (aware конвертируется, не срезается:
+    голый strip таймзоны при hh-переходе на UTC дал бы окно слепоты −3ч)."""
     if not ts:
         return None
     try:
-        return datetime.datetime.fromisoformat(ts).replace(tzinfo=None)
+        dt = datetime.datetime.fromisoformat(ts)
     except (ValueError, TypeError):
         return None
-
-
-def now_iso() -> str:
-    return datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    if dt.tzinfo is not None:
+        dt = dt.astimezone().replace(tzinfo=None)
+    return dt
 
 
 def negotiations(s, applied: dict) -> list[dict]:
     """Все applied-топики из пагинации negotiations."""
-    out, page = [], 0
+    out, page, seen = [], 0, set()
     while True:
         st = get_lux_state(s, "https://hh.ru/applicant/negotiations",
                            {"filter": "all", "page": str(page)})
@@ -63,6 +66,8 @@ def negotiations(s, applied: dict) -> list[dict]:
         topics = neg.get("topicList") or []
         if not topics:
             break
+        if page == 0 and neg.get("pageCount") is None:
+            log("⚠️ negotiations без pageCount — дрейф формата hh? Возможен обрыв на 1-й странице")
         names = {}
         for v in ((st.get("vacanciesShort") or {}).get("vacanciesList")) or []:
             c = v.get("company") or {}
@@ -70,8 +75,9 @@ def negotiations(s, applied: dict) -> list[dict]:
                                          c.get("visibleName") or c.get("name"))
         for t in topics:
             vid = t.get("vacancyId")
-            if vid not in applied:
+            if vid not in applied or vid in seen:
                 continue
+            seen.add(vid)
             nm, co = names.get(vid, (None, None))
             cid = t.get("chatId")
             out.append({
@@ -97,37 +103,26 @@ def negotiations(s, applied: dict) -> list[dict]:
     return out
 
 
-def auto_reject(applied_list: list, rec: dict, needs: bool) -> None:
-    """DISCARD → status: rejected + dialog-event. lastContact двигаем только если
-    нет непрочитанного чужого сообщения — отказ с текстом должен всплыть в attention
-    (МОЛЧАНИЕ/СОГЛАСОВАНИЕ решает LLM, не скрипт)."""
-    a = next(x for x in applied_list if x["id"] == rec["vacancyId"])
-    a["status"] = "rejected"
-    a.setdefault("dialog", []).append(
-        {"at": now_iso(), "from": "system", "kind": "event",
-         "text": "hh state → DISCARD (авто-лог inbox.py)"})
-    if not needs:
-        a["lastContact"] = now_iso()
-
-
 def main():
     applied_file = DATA / "applied.json"
-    applied_list = json.loads(applied_file.read_text())
-    applied = {a["id"]: a for a in applied_list}
+    applied = {a["id"]: a for a in json.loads(applied_file.read_text())}
 
     s = make_session()
     records = negotiations(s, applied)
 
-    dirty = False
-    candidates = []
+    backfills, candidates, unparsed_lm = {}, [], 0
     for r in records:
         a = applied[r["vacancyId"]]
         # backfill имён в старые записи (до details_info-эры)
         if not a.get("name") and r["vacancyName"]:
             a["name"], a["company"] = r["vacancyName"], r["company"]
-            dirty = True
+            backfills[r["vacancyId"]] = (r["vacancyName"], r["company"])
         cursor = _naive(a.get("lastContact"))
+        if cursor is None and a.get("status") == "sent":
+            cursor = _naive(a.get("ts"))       # фолбэк: время отклика
         lm = _naive(r["lastModified"])
+        if lm is None and r["lastModified"]:
+            unparsed_lm += 1
         target = STATE_STATUS.get(r["state"])
         r["stateMismatch"] = bool(target) and a.get("status") != target \
             and (r["state"] != "INTERVIEW" or a.get("status") in ("sent", "replied"))
@@ -135,26 +130,59 @@ def main():
             or (cursor is None and r["hasNewMessages"])
         if (maybe_new or r["stateMismatch"]) and r["chatId"]:
             candidates.append(r)
+    if unparsed_lm:
+        log(f"⚠️ lastModified не парсится у {unparsed_lm} записей — дрейф формата hh?")
 
-    auto_rejected = []
+    auto_rejected, quiet_stamp = [], []
     for r in candidates:
-        chat = chat_data(s, r["chatId"]).get("chat") or {}
-        hist = history(chat)
-        r["history"] = hist
-        r["unread"] = chat.get("unreadCount", 0)
-        r["writePossibility"] = (chat.get("writePossibility") or {}).get("name")
-        cursor = _naive(applied[r["vacancyId"]].get("lastContact"))
-        foreign = [_naive(m["at"]) for m in hist if not m["mine"]]
-        last_foreign = max((t for t in foreign if t), default=None)
-        r["needsAttention"] = last_foreign is not None and \
-            (cursor is None or last_foreign > cursor)
-        if r["state"] == "DISCARD" and applied[r["vacancyId"]].get("status") != "rejected":
-            auto_reject(applied_list, r, r["needsAttention"])
-            auto_rejected.append(r["vacancyId"])
-            r["stateMismatch"] = False
+        a = applied[r["vacancyId"]]
+        cursor = _naive(a.get("lastContact"))
+        try:
+            chat = chat_data(s, r["chatId"]).get("chat") or {}
+            hist = history(chat)
+            r["history"] = hist
+            r["unread"] = chat.get("unreadCount", 0)
+            r["writePossibility"] = (chat.get("writePossibility") or {}).get("name")
+            foreign = [_naive(m["at"]) for m in hist if not m["mine"]]
+            last_foreign = max((t for t in foreign if t), default=None)
+            r["needsAttention"] = last_foreign is not None and \
+                (cursor is None or last_foreign > cursor)
+            if r["state"] == "DISCARD" and a.get("status") != "rejected":
+                # пустая/битая история → курсор не двигаем: текст отказа (и
+                # возможный встречный вопрос) обязан всплыть в attention
+                a["status"] = "rejected"
+                a.setdefault("dialog", []).append(
+                    {"at": now_iso(), "from": "system", "kind": "event",
+                     "text": "hh state → DISCARD (авто-лог inbox.py)"})
+                if not (r["needsAttention"] or not hist):
+                    a["lastContact"] = now_iso()
+                auto_rejected.append(r["vacancyId"])
+                r["stateMismatch"] = False
+            elif not (r["needsAttention"] or r["stateMismatch"]):
+                # чат просмотрен целиком, нового чужого нет → гасим кандидата
+                # (иначе fallback-курсор по ts перепроверял бы его каждый прогон)
+                quiet_stamp.append(r["vacancyId"])
+        except Exception as ex:
+            r["error"] = f"{type(ex).__name__}: {ex}"
+            log(f"⚠️ чат {r['chatId']} ({r['vacancyId']}): {r['error']} — пропущен")
         time.sleep(CHAT_THROTTLE)
-    if auto_rejected or dirty:
-        applied_file.write_text(json.dumps(applied_list, ensure_ascii=False, indent=1))
+
+    if auto_rejected or backfills or quiet_stamp:
+        with applied_store() as fresh:       # merge в свежий файл: параллельный
+            by_id = {a["id"]: a for a in fresh}   # apply.py не должен потеряться
+            for vid in auto_rejected:
+                src, dst = applied[vid], by_id.get(vid)
+                if dst:
+                    dst["status"] = src["status"]
+                    dst["dialog"] = src.get("dialog")
+                    if src.get("lastContact"):
+                        dst["lastContact"] = src["lastContact"]
+            for vid, (nm, co) in backfills.items():
+                if by_id.get(vid):
+                    by_id[vid]["name"], by_id[vid]["company"] = nm, co
+            for vid in quiet_stamp:
+                if by_id.get(vid):
+                    by_id[vid]["lastContact"] = now_iso()
 
     for r in records:
         r.setdefault("needsAttention", False)
@@ -167,13 +195,13 @@ def main():
         "chatId": r["chatId"], "chatUrl": r["chatUrl"],
         "state": r["state"], "status": applied[r["vacancyId"]].get("status"),
         "needsAttention": r["needsAttention"], "stateMismatch": r["stateMismatch"],
-        "unread": r.get("unread", 0),
+        "unread": r.get("unread", 0), "error": r.get("error"),
         "lastMsg": (r.get("history") or [None])[-1],
-    } for r in records if r["needsAttention"] or r["stateMismatch"]]
+    } for r in records if r["needsAttention"] or r["stateMismatch"] or r.get("error")]
 
     awaiting = [{"id": a["id"], "name": a.get("name"), "company": a.get("company"),
                  "since": a.get("lastContact") or a.get("ts")}
-                for a in applied_list if a.get("status") == "awaiting_user"]
+                for a in applied.values() if a.get("status") == "awaiting_user"]
 
     print(json.dumps({
         "total": len(records),

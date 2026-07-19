@@ -17,6 +17,7 @@ import sys
 import time
 
 from hh_session import make_session, get_xsrf, log
+from applied_log import applied_store
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
@@ -136,7 +137,16 @@ def main():
         resp = send_response(s, xsrf, vid, rhash, letter)
         body = resp.get("body")
         if isinstance(body, dict) and body.get("error") == "alreadyApplied":
-            log(f"  {vid}: SKIP (alreadyApplied)")
+            log(f"  {vid}: SKIP (alreadyApplied) — восстанавливаю потерянную запись")
+            # hh отклик знает, а applied.json нет (потерян/затёрт) — вернуть след
+            info = details_info(vid) or {}
+            with applied_store() as store:
+                store.append({"id": vid, "result": "ok",
+                              "name": info.get("name"), "company": info.get("company"),
+                              "resume": resume_key, "letter": letter,
+                              "status": "sent", "topicId": None, "chatId": None,
+                              "httpStatus": 400, "note": "восстановлено по alreadyApplied",
+                              "ts": time.strftime("%Y-%m-%dT%H:%M:%S")})
             results.append({"id": vid, "result": "skip-already"})
             continue
         blocker = is_blocker(resp)
@@ -157,8 +167,9 @@ def main():
             rec["error"] = str(resp.get("body"))[:300]
         results.append(rec)
         if ok:
-            applied.append(rec)
-            applied_file.write_text(json.dumps(applied, ensure_ascii=False, indent=1))
+            applied.append(rec)          # локальный дедуп-сет этого прогона
+            with applied_store() as store:
+                store.append(rec)        # атомарно + flock (см. applied_log.py)
         if blocker:
             log(f"STOP: блокер «{blocker}» — дальше не шлём, сообщи юзеру")
             break

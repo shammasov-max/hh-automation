@@ -7,22 +7,30 @@
                                                       # после подтверждения юзером)
 
 Семантика leave — docstring src/chatik.py (negotiation цела, работодатель видит
-событие, обратимо). Селектор --rejected берёт ТОЛЬКО status=rejected с chatId и
-без события «чат покинут» в dialog; interview/awaiting_user не трогает никогда.
-Успех логируется в applied.json событием (схема applied_log).
+событие, обратимо). Гейты:
+- --rejected берёт ТОЛЬКО status=rejected с chatId без события выхода;
+- interview / awaiting_user не покидаются НИКОГДА (даже --ids);
+- sent / replied в --ids — только с --force (живой диалог, возможен
+  неотвеченный вопрос к нам — проверить history перед force);
+- уже покинутые (event «чат покинут») отсекаются в обеих ветках.
+Успех логируется в applied.json событием (схема applied_log, атомарно).
 """
 import argparse
 import json
-import pathlib
 import time
 
 from hh_session import make_session, get_xsrf, log
 from chatik import leave
-from applied_log import now_iso
+from applied_log import applied_store, now_iso, APPLIED
 
-DATA = pathlib.Path(__file__).resolve().parent.parent / "data"
 THROTTLE = 1.0
 LEFT_MARK = "чат покинут"
+
+
+def already_left(a: dict) -> bool:
+    return any(LEFT_MARK in (d.get("text") or "")
+               and d.get("from") == "system" and d.get("kind") == "event"
+               for d in a.get("dialog") or [])
 
 
 def main():
@@ -30,14 +38,12 @@ def main():
     g = ap.add_mutually_exclusive_group(required=True)
     g.add_argument("--rejected", action="store_true")
     g.add_argument("--ids", help="vacancyId через запятую")
+    ap.add_argument("--force", action="store_true",
+                    help="разрешить sent/replied в --ids (проверь history!)")
     ap.add_argument("--send", action="store_true")
     args = ap.parse_args()
 
-    f = DATA / "applied.json"
-    applied = json.loads(f.read_text())
-
-    def already_left(a):
-        return any(LEFT_MARK in (d.get("text") or "") for d in a.get("dialog") or [])
+    applied = json.loads(APPLIED.read_text())
 
     if args.rejected:
         cand = [a for a in applied
@@ -45,12 +51,19 @@ def main():
                 and not already_left(a)]
     else:
         want = {int(x) for x in args.ids.split(",")}
-        cand = [a for a in applied if a["id"] in want and a.get("chatId")]
-        blocked = [a for a in cand if a.get("status") in ("interview", "awaiting_user")]
-        if blocked:
-            for a in blocked:
-                log(f"  SKIP {a['id']} {a.get('company')}: status={a['status']} — не выходим")
-            cand = [a for a in cand if a not in blocked]
+        cand = []
+        for a in applied:
+            if a["id"] not in want or not a.get("chatId"):
+                continue
+            st = a.get("status")
+            if st in ("interview", "awaiting_user"):
+                log(f"  SKIP {a['id']} {a.get('company')}: status={st} — не выходим никогда")
+            elif st in ("sent", "replied") and not args.force:
+                log(f"  SKIP {a['id']} {a.get('company')}: status={st} — живой диалог, нужен --force")
+            elif already_left(a):
+                log(f"  SKIP {a['id']} {a.get('company')}: уже покинут")
+            else:
+                cand.append(a)
 
     if not args.send:
         print(json.dumps({"mode": "dry-run", "candidates": len(cand),
@@ -69,10 +82,12 @@ def main():
         fail += not good
         log(f"  {a['id']} {a.get('company')}: {'OK' if good else 'FAIL '+str(resp)[:120]}")
         if good:
-            a.setdefault("dialog", []).append(
-                {"at": now_iso(), "from": "system", "kind": "event",
-                 "text": f"{LEFT_MARK} (chat_leave)"})
-            f.write_text(json.dumps(applied, ensure_ascii=False, indent=1))
+            with applied_store() as fresh:
+                rec = next((x for x in fresh if x["id"] == a["id"]), None)
+                if rec:
+                    rec.setdefault("dialog", []).append(
+                        {"at": now_iso(), "from": "system", "kind": "event",
+                         "text": f"{LEFT_MARK} (chat_leave)"})
         if i < len(cand) - 1:
             time.sleep(THROTTLE)
     print(json.dumps({"mode": "send", "ok": ok, "fail": fail}, ensure_ascii=False))
