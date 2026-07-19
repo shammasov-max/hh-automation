@@ -16,6 +16,11 @@
   toggle_notification, set_write_possibility, rate_chat, upload_file.
 
 Старый канал (SSR-конфиг /api/chat/messages, ~20 чатов) этим заменён полностью.
+
+Поиск новых эндпоинтов (метод@2026-07-19): сам лоадер remote.chatik.*.js почти
+пуст (греп даёт 1 эндпоинт из 23) — надо вытащить из него webpack-карту чанков
+{chunkId:"hash",...} и грепать https://chatik.hh.ru/static/<id>.<hash>.js
+по '/chatik/api/'.
 """
 import uuid
 
