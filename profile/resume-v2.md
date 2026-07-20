@@ -3,17 +3,20 @@
 > Базируется на дословном слепке `resume.md` (hh.ru senior-en, обновлено 2026-05-11).
 > Применены правки 1–13 (согласовано 2026-07-13): SOL→SUI, Flaps = 2.5M, GitHub = shammasov-max,
 > «Customizable resource model to source» оставлен как в оригинале по решению юзера.
-> Правка 14 (2026-07-14) — статус поиска работы, требует подтверждения.
+> Правка 14 — статус поиска: подтверждена юзером@2026-07-20 («Активно ищу работу»).
+> Правка 15 (решено@2026-07-20): Go выведен из стека — убран из keySkills и «Обо мне»;
+> упоминания Go в описаниях прошлых мест — история, оставлены.
+> Зарплата: юзер решил НЕ указывать (2026-07-20) — поле пустое, торг в переписке.
 > Этот файл — образец для переноса на hh.ru.
 
 ## Поля hh (метаданные)
 
 - **Заголовок:** Senior Fullstack Engineer / Фулстек-разработчик (TypeScript, Node.js, React)
-- **Зарплата:** 280 000 ₽ на руки
-- **Статус поиска работы:** «Активно ищу работу» ⚠️ **правка 14** — сейчас стоит `has_job_offer` («Предложили работу, пока думаю», выставлен 2025-12-21). Рекрутёр видит этот статус: он читается как «кандидат почти нанят / торгуется» и снижает интерес. Если оффера на руках нет — поменять. Если есть и это осознанно — оставить.
+- **Зарплата:** не указана (решение юзера@2026-07-20; пороги ожиданий — в candidate-facts.md, называть в переписке)
+- **Статус поиска работы:** «Активно ищу работу» (`active_search`; подтверждено юзером@2026-07-20, был `has_job_offer` с 2025-12-21)
 - **Видимость резюме:** `clients` (видно компаниям, зарегистрированным на hh.ru) — проверить в UI, что это то, что нужно; более закрытая настройка обнулит findability
 - **Регион:** Казань · **Переезд:** нет · **Командировки:** готов
-- **Формат работы:** REMOTE + ON_SITE (удалённо; офис/гибрид — Казань)
+- **Формат работы:** REMOTE + HYBRID + ON_SITE (удалённо; офис/гибрид — Казань; HYBRID добавлен@2026-07-20 — скобка и так его обещала, фильтр рекрутёров по гибриду иначе отсекает)
 - **Занятость:** полная, частичная, проектная · **График:** полный день
 - **Спец. роли hh:** Programmer, developer (96); Development team leader (104)
 - **Портфолио / personalSite:** https://github.com/shammasov-max
@@ -21,17 +24,17 @@
 - **Фото:** загружено ✅ · **Рекомендация:** Павел Алешкевич (генеральный директор, ООО ТетраСофт) ✅ — оба сигнала на месте, не трогать
 - **Контакты:** +7 977 766-60-76 (telegram: @shammasov), miramaxis@gmail.com
 
-## Ключевые навыки (keySkills, 32)
+## Ключевые навыки (keySkills, 30)
 
-TypeScript, JavaScript, Node.js, React.js, Next.js, React Native, Nest.js, Fastify, PostgreSQL, ClickHouse, Redis, MongoDB, MySQL, Rust, Go, Python, FastAPI, LLM, RAG, LangChain, Docker, CI/CD, Playwright, REST API, REST, JSON API, SQL, NoSQL, Git, ООП, Team management, Teamleading
+TypeScript, JavaScript, Node.js, React.js, Next.js, React Native, Nest.js, Fastify, PostgreSQL, ClickHouse, Redis, MongoDB, MySQL, Rust, Python, FastAPI, LLM, RAG, LangChain, Docker, CI/CD, Playwright, REST API, REST, SQL, NoSQL, Git, ООП, Team management, Teamleading
 
-> Если hh упрётся в лимит навыков — выкидывать с хвоста в порядке: JSON API → NoSQL → ООП.
+> Лимит hh = 30 навыков (подтверждено@2026-07-20: `SIZE_GREATER_THAN_MAXIMUM`). JSON API выкинут первым по согласованному порядку (JSON API → NoSQL → ООП).
 
 ## Обо мне
 
 Senior/lead fullstack engineer: 18 years in production, 8+ years as tech lead / CTO. I build fintech and high-load systems end-to-end and stay hands-on in the code.
 
-Core stack: TypeScript / Node.js, React / Next.js (SSR) / React Native. I also ship Go and Rust where they pay off (indexers, hot-path services) and Python for AI/LLM services.
+Core stack: TypeScript / Node.js, React / Next.js (SSR) / React Native. I also ship Rust where it pays off (indexers, hot-path services) and Python for AI/LLM services.
 
 AI/LLM in production: RAG, agents, tool calling, pgvector, FastAPI.
 
@@ -137,12 +140,17 @@ Presentations, kiosks, games.
 
 - Высшее, 2011 — Институт менеджмента, маркетинга и финансов, Воронеж (ИММиФ), специальность: менеджмент организации
 
-## Чек-лист переноса на hh.ru (senior-en)
+## Чек-лист переноса на hh.ru — ПЕРЕНЕСЕНО@2026-07-20
 
-- ⏳ Поля UI: формат работы (+Удалённо), зарплата (280 000 net), заголовок, портфолио-ссылка
-- ⏳ Статус поиска работы: `has_job_offer` → «Активно ищу работу» (если оффера нет); проверить настройку видимости резюме
-- ⏳ keySkills: удалить только Flash Actionscript и Web Application Development; добавить Next.js, React Native, Fastify, Redis, MySQL→оставить, Rust, Go, FastAPI, LLM, RAG, LangChain, Docker, CI/CD, Playwright (REST, JSON API, ООП, SQL, Git, NoSQL — сохранить, фильтры HR по ним бинарны)
-- ⏳ «Обо мне»: заменить целиком
-- ⏳ Опыт: Aftermath (титул+текст), «-» → «Independent contractor, remote» (название+титул+текст), stablix (титул+текст), btce (текст), ТетраСофт (клиенты+conflicting), Flaps (титул+текст), вставить позицию Genestack (2018-03→2018-06)
-- ⏳ Скобки в заголовках позиций («crypto brokerage, SUI blockchain», «Stellar fintech», «game development studio») — hh не имеет поля под это: вписать первой строкой описания либо оставить в названии компании
-- 📌 После правок: сверить канон с тремя другими резюме (btce-даты, Flaps 2.5M/30 чел, вуз Воронеж) или скрыть их
+Перенос выполнен REST'ом (`POST /applicant/resume/edit`, сессия 2026-07-20), финальный GET сверен, слепок — `resume.md`.
+Применено к **fullstack-en (основное, указание юзера)** и senior-en (клон; титул EN-вариант — hh запрещает дубль).
+lead-ru и head-ru выровнены по срокам/местам работы/вузу (higher, ИММиФ Воронеж 2011); русские тексты добавленных позиций — сжатые переводы v2.
+
+- ✅ Поля UI: формат работы REMOTE+HYBRID+ON_SITE, заголовок, портфолио-ссылка (github, type personal); зарплата пустая (решение@2026-07-20)
+- ✅ Статус поиска: `active_search` с 2026-07-20; видимость `clients` не менялась
+- ✅ keySkills: 30 (лимит hh; JSON API выкинут по согласованному порядку); Go не добавлен (правка 15); hh канонизировал `ClickHouse`→`Clickhouse`
+- ✅ «Обо мне»: заменён целиком (версия без Go)
+- ✅ Опыт: все 6 правок + Genestack вставлен (9 записей). ⚠️ id записей hh пересадил позиционно (Genestack сел на бывший id ТетраСофта, Flaps получил новый) — сверять по контенту, не по id
+- ✅ Скобки: Aftermath (привязана к работодателю) — первой строкой описания «Crypto brokerage on SUI blockchain.»; stablix и Flaps (свободные) — в названии компании
+- ✅ employmentForms: enum PROJECT hh отверг (400) — осталось FULL+PART_TIME; «проектная» живёт в старом поле `employment` (full/part/project)
+- ⏳ Сверка канона с тремя другими резюме (btce-даты, Flaps 2.5M/30 чел, вуз Воронеж) — см. отчёт сессии 2026-07-20
