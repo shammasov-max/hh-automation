@@ -15,8 +15,8 @@
 - БД: PostgreSQL, ClickHouse, MongoDB, MySQL, Cassandra, Redis
 - AI/LLM: интеграции, агенты, RAG, Python+LLM-скриптинг
 - Автоматизации: Playwright, парсеры, скрейперы
-- Блокчейн: Stellar, SUI, EOS, Solana; Rust-порты, Go/Rust-индексеры
-- Также пишет: Go, Rust, Python, Java, PHP (вторичный стек)
+- Блокчейн: Stellar, SUI, EOS, Solana; Rust-порты, Rust-индексеры
+- Также пишет: Rust, Python, Java, PHP (вторичный стек)
 
 ## Плюс-сигналы вакансии
 - High-load, данные, событийные пайплайны (ClickHouse, billions events/day)
@@ -47,6 +47,7 @@
 - MQL / Pine Script / торговые индикаторы
 - Не-IT роли (менеджер, аналитик без кода, дизайнер)
 - Junior-позиции (workExperience: noExperience, between1And3)
+- **Go/Golang как основной язык вакансии** (в названии или primary в требованиях) — не показывать (решено@2026-07-20: Go выведен из стека, Go-вакансии больше не ищем). Go в перечне «плюсом будет» при основном TS/Python-стеке — не повод отсекать
 
 ## Скоринг (0–10)
 - 9–10: точный стек + сеньорность + удалёнка/Казань + зарплата ≥ порога или лид-роль в сильном домене
